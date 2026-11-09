@@ -5,6 +5,8 @@
 """
 
 import json
+import random
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
@@ -77,3 +79,44 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+
+def make_quiz(lecture: int) -> str:
+    """指定した回の用語から確認問題を1問作る。
+
+    「第2回の確認問題を出して」のように、講義内容の復習問題を求められたときに使う。
+    lecture には対象の回を整数で指定する。
+    """
+    entries = [entry for entry in load_glossary() if entry["lecture"] == lecture]
+    if not entries:
+        return f"第{lecture}回の用語が見つからないため、確認問題を作れません。"
+
+    entry = random.choice(entries)
+    return json.dumps(
+        {
+            "question": f"「{entry['term']}」の意味は？",
+            "answer": entry["definition"],
+        },
+        ensure_ascii=False,
+    )
+
+
+LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
+
+
+def save_learning_log(title: str, content: str) -> str:
+    """学習の記録を learning_log/ フォルダに Markdown ファイルとして保存する。
+
+    利用者が「記録して」「ログに残して」「保存して」と頼んだときだけ使う。
+    title には記録の短い見出し（例: "第3回 ツールの追加"）を、
+    content には保存する本文（学んだこと・疑問点など）を渡す。
+    """
+    LOG_DIR.mkdir(exist_ok=True)
+    now = datetime.now()
+    name = "".join(c for c in title if c.isalnum() or c in "-_")[:40] or "log"
+    path = LOG_DIR / f"{now:%Y%m%d-%H%M%S}-{name}.md"
+    path.write_text(
+        f"# {title}\n\n- 保存日時: {now:%Y-%m-%d %H:%M}\n\n{content}\n",
+        encoding="utf-8",
+    )
+    return f"保存しました: learning_log/{path.name}"

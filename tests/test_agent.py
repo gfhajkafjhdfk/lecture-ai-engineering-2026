@@ -40,3 +40,14 @@ def test_glossary_result_reaches_the_model():
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
     assert returns and returns[0].tool_name == "search_glossary"
+
+
+def test_make_quiz_is_registered_and_called():
+    model = TestModel(call_tools=["make_quiz"])
+    with agent.override(model=model):
+        result = agent.run_sync("第2回の確認問題を出して")
+
+    offered = {tool.name for tool in model.last_model_request_parameters.function_tools}
+    called = {part.tool_name for part in _parts(result, ToolCallPart)}
+    assert "make_quiz" in offered
+    assert "make_quiz" in called
