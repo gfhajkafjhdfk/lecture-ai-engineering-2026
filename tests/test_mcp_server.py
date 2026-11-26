@@ -1,4 +1,4 @@
-"""第5回: MCP サーバーとクライアントの配線テスト（LLM も API キーも使わない）。
+"""第6回: MCP サーバーとクライアントの配線テスト（LLM も API キーも使わない）。
 
 app/mcp_servers.json の glossary サーバーを実際に起動し（stdio）、TestModel で
 「ツールが MCP 経由で公開され、呼ばれ、結果が戻るか」を確かめる。
@@ -12,6 +12,14 @@ from pydantic_ai.models.test import TestModel
 from app.agent import MCP_CONFIG, build_mcp_agent
 
 GLOSSARY_TOOL = "glossary_search_glossary"  # 設定ファイルのサーバー名 "glossary" が前に付く
+QUIZ_TOOL = "glossary_make_quiz"
+
+
+class InvalidLectureTestModel(TestModel):
+    def gen_tool_args(self, tool_def):
+        if tool_def.name == QUIZ_TOOL:
+            return {"lecture": 99}
+        return super().gen_tool_args(tool_def)
 
 
 def _glossary_only_config(tmp_path):
@@ -46,3 +54,16 @@ def test_glossary_result_comes_back_through_mcp(tmp_path):
     assert returns and returns[0].tool_name == GLOSSARY_TOOL
     assert str(returns[0].content).strip()  # 検索結果（または「見つかりませんでした」）が戻っている
     assert result.output
+
+
+def test_quiz_tool_handles_unavailable_lecture_through_mcp(tmp_path):
+    model = InvalidLectureTestModel(call_tools=[QUIZ_TOOL])
+    result = build_mcp_agent(_glossary_only_config(tmp_path)).run_sync(
+        "第99回のクイズを作って", model=model
+    )
+
+    assert [p.tool_name for p in _parts(result, ToolCallPart)] == [QUIZ_TOOL]
+    returns = _parts(result, ToolReturnPart)
+    assert returns and returns[0].tool_name == QUIZ_TOOL
+    assert "第99回の用語はありません" in str(returns[0].content)
+    assert "1, 2, 3, 4, 6" in str(returns[0].content)
